@@ -24,7 +24,7 @@ pub fn async_stdin_until(delimiter: u8) -> AsyncReader {
         }
     });
 
-    AsyncReader { recv }
+    AsyncReader { recv, timeout: 100 }
 }
 
 /// Construct an asynchronous handle to the TTY standard input.
@@ -46,7 +46,7 @@ pub fn async_stdin() -> AsyncReader {
                       }
                   });
 
-    AsyncReader { recv: recv }
+    AsyncReader { recv, timeout: 100 }
 }
 
 /// An asynchronous reader.
@@ -56,6 +56,8 @@ pub fn async_stdin() -> AsyncReader {
 pub struct AsyncReader {
     /// The underlying mpsc receiver.
     recv: mpsc::Receiver<io::Result<u8>>,
+    /// Timeout before giving up on a drained input stream
+    pub timeout: usize
 }
 
 // FIXME: Allow constructing an async reader from an arbitrary stream.
@@ -68,6 +70,7 @@ impl Read for AsyncReader {
     /// stream halted.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut total = 0;
+        let mut waitms = 1;
 
         loop {
             if total >= buf.len() {
@@ -80,7 +83,19 @@ impl Read for AsyncReader {
                     total += 1;
                 }
                 Ok(Err(e)) => return Err(e),
-                Err(_) => break,
+                Err(_) => {
+                    // The input stream may be slow to deliver complete control sequences,
+                    // and make this function return a drained buffer when there are chars
+                    // almost ready to arrive and be delivered. A drained input in the middle
+                    // of a control sequence will confuse/crash the event decoder.
+                    // So, we wait a progressively longer slice of time before giving up
+                    // and returning an empty response.
+                    if total > 0 || waitms > self.timeout {
+                        break
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(waitms as u64));
+                    waitms = waitms * 10;
+                }
             }
         }
 

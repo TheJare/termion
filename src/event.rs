@@ -120,7 +120,8 @@ pub fn parse_event<I>(item: u8, iter: &mut I) -> Result<Event, Error>
                     let ch = parse_utf8_char(c, iter);
                     Event::Key(Key::Alt(try!(ch)))
                 }
-                Some(Err(_)) | None => return Err(error),
+                Some(Err(_))  => return Err(error),
+                None => Event::Key(Key::Esc)
             })
         }
         b'\n' | b'\r' => Ok(Event::Key(Key::Char('\n'))),

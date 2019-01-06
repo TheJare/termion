@@ -102,11 +102,13 @@ impl<W: Write> IntoRawMode for W {
 }
 
 impl<W: Write> RawTerminal<W> {
+    /// Restore terminal state after having set raw mode
     pub fn suspend_raw_mode(&self) -> io::Result<()> {
         set_terminal_attr(&self.prev_ios)?;
         Ok(())
     }
 
+    /// Set terminal into raw mode
     pub fn activate_raw_mode(&self) -> io::Result<()> {
         let mut ios = get_terminal_attr()?;
         raw_terminal_attr(&mut ios);
